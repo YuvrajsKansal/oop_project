@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cctype>
+#include <fstream>
 using namespace std;
 
 string toLower(string s) {
@@ -49,6 +50,17 @@ public:
         cout << "\nResolved: " << (isResolved ? "Yes" : "No");
     }
 
+    virtual void saveToFile(ofstream& file) {
+        file << id << "\n";
+        file << name << "\n";
+        file << description << "\n";
+        file << category << "\n";
+        file << location << "\n";
+        file << date << "\n";
+        file << reporterID << "\n";
+        file << (isResolved ? 1 : 0) << "\n";
+    }
+
     bool matches(string keyword) {
         string all = toLower(name + " " + description + " " + category + " " + location);
         string word = toLower(keyword);
@@ -65,6 +77,16 @@ public:
 
     void markResolved(){
          isResolved = true; 
+    }
+
+    void setId(int newId){
+         id = newId; 
+    }
+
+    static void updateNextId(int usedId){
+         if (usedId >= nextId) {
+             nextId = usedId + 1;
+         }
     }
 
     int getId(){
@@ -109,6 +131,12 @@ public:
         cout << "\nIdentifying Mark: " << identifyingMark;
         cout << "\n\n";
     }
+
+    void saveToFile(ofstream& file) override {
+        Item::saveToFile(file);
+        file << ownerContact << "\n";
+        file << identifyingMark << "\n";
+    }
 };
 
 class FoundItem : public Item {
@@ -131,6 +159,12 @@ public:
         cout << "\nKept At: " << whereKept;
         cout << "\n\n";
     }
+
+    void saveToFile(ofstream& file) override {
+        Item::saveToFile(file);
+        file << finderContact << "\n";
+        file << whereKept << "\n";
+    }
 };
 
 class User {
@@ -151,6 +185,12 @@ public:
 
     bool checkPassword(string p) {
         return password == p;
+    }
+
+    void saveToFile(ofstream& file) {
+        file << username << "\n";
+        file << password << "\n";
+        file << contact << "\n";
     }
 
     int getUserId() { return userId; }
@@ -191,6 +231,112 @@ int readInt(string ques) {
     }
     cin.ignore(1000, '\n');
     return value;
+}
+
+void saveAll() {
+    ofstream userFile("users.txt");
+    userFile << userCount << "\n";
+    for (int i = 0; i < userCount; i++) {
+        users[i]->saveToFile(userFile);
+    }
+
+    ofstream lostFile("lost.txt");
+    lostFile << lostCount << "\n";
+    for (int i = 0; i < lostCount; i++) {
+        lostItems[i]->saveToFile(lostFile);
+    }
+
+    ofstream foundFile("found.txt");
+    foundFile << foundCount << "\n";
+    for (int i = 0; i < foundCount; i++) {
+        foundItems[i]->saveToFile(foundFile);
+    }
+}
+
+void loadAll() {
+    ifstream userFile("users.txt");
+    if (userFile) {
+        int count = 0;
+        userFile >> count;
+        userFile.ignore();
+        for (int i = 0; i < count && userCount < 100; i++) {
+            string username, password, contact;
+            getline(userFile, username);
+            getline(userFile, password);
+            getline(userFile, contact);
+
+            users[userCount] = new User(username, password, contact);
+            userCount++;
+        }
+    }
+
+    ifstream lostFile("lost.txt");
+    if (lostFile) {
+        int count = 0;
+        lostFile >> count;
+        lostFile.ignore();
+        for (int i = 0; i < count && lostCount < 100; i++) {
+            int id, reporterId, resolved;
+            string name, description, category, location, date, contact, mark;
+
+            lostFile >> id;
+            lostFile.ignore();
+            getline(lostFile, name);
+            getline(lostFile, description);
+            getline(lostFile, category);
+            getline(lostFile, location);
+            getline(lostFile, date);
+            lostFile >> reporterId;
+            lostFile >> resolved;
+            lostFile.ignore();
+            getline(lostFile, contact);
+            getline(lostFile, mark);
+
+            LostItem* item = new LostItem(name, date, reporterId, description,
+                                          category, location, contact, mark);
+            item->setId(id);
+            Item::updateNextId(id);
+            if (resolved == 1) {
+                item->markResolved();
+            }
+            lostItems[lostCount] = item;
+            lostCount++;
+        }
+    }
+
+    ifstream foundFile("found.txt");
+    if (foundFile) {
+        int count = 0;
+        foundFile >> count;
+        foundFile.ignore();
+        for (int i = 0; i < count && foundCount < 100; i++) {
+            int id, reporterId, resolved;
+            string name, description, category, location, date, contact, kept;
+
+            foundFile >> id;
+            foundFile.ignore();
+            getline(foundFile, name);
+            getline(foundFile, description);
+            getline(foundFile, category);
+            getline(foundFile, location);
+            getline(foundFile, date);
+            foundFile >> reporterId;
+            foundFile >> resolved;
+            foundFile.ignore();
+            getline(foundFile, contact);
+            getline(foundFile, kept);
+
+            FoundItem* item = new FoundItem(name, date, reporterId, description,
+                                            category, location, contact, kept);
+            item->setId(id);
+            Item::updateNextId(id);
+            if (resolved == 1) {
+                item->markResolved();
+            }
+            foundItems[foundCount] = item;
+            foundCount++;
+        }
+    }
 }
 
 string chooseCategory() {
@@ -234,6 +380,7 @@ void signUp() {
 
     users[userCount] = new User(username, password, contact);
     userCount++;
+    saveAll();
     cout << "Account created. You can log in now.\n";
 }
 
@@ -275,7 +422,8 @@ void addLostItem() {
     lostItems[lostCount] = new LostItem(name, date, currentUser->getUserId(), description,
                                         category, location, currentUser->getContact(), mark);
     cout << "\nLost item reported. Its ID is " << lostItems[lostCount]->getId() << ".\n";
-    lostCount++;   
+    lostCount++;
+    saveAll();
 }
 
 void addFoundItem() {
@@ -296,6 +444,7 @@ void addFoundItem() {
                                            category, location, currentUser->getContact(), kept);
     cout << "\nFound item reported. Its ID is " << foundItems[foundCount]->getId() << ".\n";
     foundCount++;
+    saveAll();
 }
 
 void viewLostItems() {
@@ -364,6 +513,7 @@ void resolveItem() {
             }
             lostItems[i]->markResolved();
             cout << "Lost item " << id << " marked as resolved.\n";
+            saveAll();
             return;
         }
     }
@@ -376,6 +526,7 @@ void resolveItem() {
             }
             foundItems[i]->markResolved();
             cout << "Found item " << id << " marked as resolved.\n";
+            saveAll();
             return;
         }
     }
@@ -409,6 +560,8 @@ void showMenu() {
 
 int main() {
     bool running = true;
+
+    loadAll();
 
     while (running) {
         if (currentUser == nullptr) {
